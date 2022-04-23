@@ -1,0 +1,102 @@
+import { loadStdlib, ask } from '@reach-sh/stdlib';
+import * as backend from './build/index.main.mjs'; // import backend
+const stdlib = loadStdlib();
+
+function sleep(milliseconds){
+  const date = Date.now();
+  let currentDate = null;
+  do {
+    currentDate = Date.now();
+  } while (currentDate - date < milliseconds);
+}
+
+
+console.log(`Welcome to BlackJack`);
+sleep(2000);
+console.log(`Have a seat you card shark`);
+sleep(2000);
+console.log(`I hope you left your lunch money at home...`);
+sleep(2000);
+console.log(`This is a heads up game, Player vs Dealer`);
+sleep(2000);
+console.log(`Both start with 1000 balance`);
+sleep(2000);
+
+const startingBalance = stdlib.parseCurrency(1000);
+const accPlayer = await stdlib.newTestAccount(startingBalance);
+const accDealer = await stdlib.newTestAccount(startingBalance);
+
+const fmt = (x) => stdlib.formatCurrency(x, 4);
+const getBalance = async (who) => fmt(await stdlib.balanceOf(who));
+const beforePlayer = await getBalance(accPlayer);
+const beforeDealer = await getBalance(accDealer);
+
+const ctcPlayer = accPlayer.contract(backend);
+const ctcDealer = accDealer.contract(backend, ctcPlayer.getInfo());
+
+const CARD = { 1: 'Ace', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'Jack', 12: 'Queen', 13: 'King'}
+const OUTCOME = ['Player wins!', 'Dealer wins!', 'Draw', 'Player Busts!'];
+
+const Shared = (Who) => ({
+  ...stdlib.hasRandom,
+  getCard: async () => {
+    const card = Math.floor(Math.random() * 13) + 1;
+    //console.log(`Value of card is ${card}`);
+    if(card == 11){
+      console.log(`${Who} drew a Jack`)
+      return 10;
+    } else {
+      if(card == 12){
+        console.log(`${Who} drew a Queen`)
+        return 10;
+      } else {
+        if(card == 13){
+          console.log(`${Who} drew a King`)
+          return 10;
+        } else {
+          if(card == 1){
+            console.log(`${Who} drew an Ace`)
+            return card;
+          } else {
+            console.log(`${Who} drew a ${CARD[card]}`)
+            return card;
+          }
+        }
+      }
+    };
+    
+  },
+  seeOutcome: (outcome) => {
+    console.log(`${Who} saw outcome ${OUTCOME[outcome]}`);
+  },
+  informTimeout: () => {
+    console.log(`${Who} observed a timeout`);
+  },
+  bust: () => {
+    console.log(`${Who} busts. Tough luck kid`);
+  },
+  
+  seeActual: (total) => {
+    console.log(`${Who} total is: ${total}`);
+  },
+});
+
+await Promise.all([
+  ctcPlayer.p.Player({
+    ...Shared('Player'),
+    wager: stdlib.parseCurrency(5),
+    deadline: 10,
+  }),
+  ctcDealer.p.Dealer({
+    ...Shared('Dealer'),
+    acceptWager: async (amount) => {
+      console.log(`Dealer accepts the wager of ${fmt(amount)}`);
+    },
+  }),
+]);
+
+const afterPlayer = await getBalance(accPlayer);
+const afterDealer = await getBalance(accDealer);
+
+console.log(`Player went from ${beforePlayer} to ${afterPlayer}.`);
+console.log(`Dealer went from ${beforeDealer} to ${afterDealer}.`);
