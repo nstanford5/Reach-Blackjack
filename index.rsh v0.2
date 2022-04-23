@@ -1,0 +1,160 @@
+'reach 0.1';
+
+const [gameOutcome, PLAYER_WINS, DEALER_WINS, DRAW, PLAYER_BUST] = makeEnum(4);
+
+
+// here is the game logic
+// start small and build up
+const winner = (playerHand, dealerHand) => {
+  if(playerHand > 21){
+    return PLAYER_BUST;
+  } else {
+    if(dealerHand > 21){
+      return PLAYER_WINS;
+    } else {
+      if(dealerHand == playerHand){
+        return DRAW;
+      } else {
+        if(playerHand > dealerHand){
+          return PLAYER_WINS;
+        } else {
+          return DEALER_WINS;
+        }
+      }
+    }
+
+  }
+};
+
+// assertions
+assert(winner(20, 20) == DRAW);
+assert(winner(22, 16) == PLAYER_BUST);
+assert(winner(18, 20) == DEALER_WINS);
+
+// test all possibilites
+forall(UInt, playerHand =>
+  forall(UInt, dealerHand =>
+    assert(gameOutcome(winner(playerHand, dealerHand)))));
+
+// shared Player method signatures
+const Player = {
+  ...hasRandom,
+  getCard: Fun([], UInt),
+  seeOutcome: Fun([UInt], Null),
+  informTimeout: Fun([], Null),
+  seeActual: Fun([UInt], Null),
+  //bust: Fun([], Null),
+};
+
+export const main = Reach.App(() => {
+
+  const Shark = Participant('Shark', {
+    ...Player,
+    wager: UInt,
+    deadline: UInt,
+  });
+
+  const Dealer = Participant('Dealer', {
+    ...Player,
+    acceptWager: Fun([UInt], Null),
+  });
+
+  init();
+
+  const informTimeout = () => {
+    each([Shark, Dealer], () => {
+      interact.informTimeout();
+    });
+  };
+
+  Shark.only(() => {
+    const wager = declassify(interact.wager);
+    const deadline = declassify(interact.deadline);
+  });
+
+  Shark.publish(wager, deadline)
+    .pay(wager);
+  commit();
+
+  Dealer.only(() => {
+    interact.acceptWager(wager);
+  });
+
+  Dealer.pay(wager)
+    .timeout(relativeTime(deadline), () => closeTo(Shark, informTimeout));
+
+  var outcome = DRAW;
+ 
+  invariant(balance() == 2 * wager && gameOutcome(outcome));
+
+  while (outcome == DRAW){
+    commit();
+
+    Shark.only(() => {
+      // create private card value
+      const _sharkCardA = interact.getCard();
+      const _sharkCardB = interact.getCard();
+
+      // create salt and commit values for first card
+      const [_commitA, _saltA] = makeCommitment(interact, _sharkCardA);
+      const commitA = declassify(_commitA); // publish hashed commit value
+
+      // create salt and commit values for the second card
+      const [_commitB, _saltB] = makeCommitment(interact, _sharkCardB);
+      const commitB = declassify(_commitB);
+    });
+
+    Shark.publish(commitA, commitB)
+      .timeout(relativeTime(deadline), () => closeTo(Dealer, informTimeout));
+    commit();
+
+    unknowable(Dealer, Shark(_sharkCardA, _saltA, _sharkCardB, _saltB));
+
+    Dealer.only(() => {
+      const _dealerCardA = interact.getCard();
+      const _dealerCardB = interact.getCard();
+      const cardA = declassify(_dealerCardA);
+      const cardB = declassify(_dealerCardB);
+    });
+
+    Dealer.publish(cardA, cardB)
+      .timeout(relativeTime(deadline), () => closeTo(Shark, informTimeout));
+    commit();
+
+    Shark.only(() => {
+      const [saltA, sharkCardA] = declassify([_saltA, _sharkCardA]);
+      const [saltB, sharkCardB] = declassify([_saltB, _sharkCardB]);
+    });
+
+    // publish these values to the blockchain
+    Shark.publish(saltA, sharkCardA, saltB, sharkCardB)
+      .timeout(relativeTime(deadline), () => closeTo(Dealer, informTimeout));
+    checkCommitment(commitA, saltA, sharkCardA);
+    checkCommitment(commitB, saltB, sharkCardB);
+
+    const playerTotal = sharkCardA + sharkCardB;
+    const dealerTotal = cardA + cardB;
+
+    // display total
+    Shark.only(() => {
+      interact.seeActual(playerTotal);
+    });
+
+    // display total
+    Dealer.only(() => {
+      interact.seeActual(dealerTotal);
+    });
+
+    outcome = winner(playerTotal, dealerTotal);
+    continue;
+  };
+
+  assert( outcome == PLAYER_BUST || outcome == DEALER_WINS || outcome == PLAYER_WINS);
+  transfer(2 * wager).to(outcome == PLAYER_WINS ? Shark : Dealer);
+  commit();
+
+  each([Shark, Dealer], () => {
+    interact.seeOutcome(outcome);
+  });
+  exit();
+});
