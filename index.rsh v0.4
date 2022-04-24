@@ -1,0 +1,95 @@
+/*
+* This version features nested while loops. One for the players interaction,
+* the other for the dealer. Player can hit as much as they like, Dealer must hit below 15
+*/
+
+'reach 0.1';
+
+// this considers aces high
+const cardValue = (x) => (x == 1 ? 11 : (x < 10 ? x : 10))
+
+const Shared = {
+  ...hasRandom,
+  seeTotal: Fun([UInt], Null),
+  getCard: Fun([], UInt),
+  startGame: Fun([], Tuple(UInt, UInt)),
+};
+
+export const main = Reach.App(() => {
+  const Player = Participant('Player', {
+    ...Shared,
+    wager: UInt,
+    // Specify Alice's interact interface here
+  });
+  const Dealer = Participant('Dealer', {
+    ...Shared,
+    autoCard: Fun([], UInt),
+    // Specify Bob's interact interface here
+  });
+  init();
+
+  Player.only(() => {
+    const wager = declassify(interact.wager);
+    const [cardA, cardB] = declassify(interact.startGame());
+  });
+
+  // The first one to publish deploys the contract
+  Player.publish(wager, cardA, cardB)
+    .pay(wager);
+  commit();
+  // The second one to publish always attaches
+  Dealer.pay(wager);
+  commit();
+
+  Dealer.only(() => {
+    const [dealerCardA, dealerCardB] = declassify(interact.startGame());
+  });
+  Dealer.publish(dealerCardA, dealerCardB);
+
+  // outer loop is the dealer
+  var [sumB, flag] = [(cardValue(dealerCardA)+cardValue(dealerCardB)),0];
+  invariant(balance() == 2 * wager);
+  while(flag == 0){
+    commit();
+    Dealer.publish();
+    var [sumA, flagB] = [(cardValue(cardA)+cardValue(cardB)), 0];
+    invariant(balance() == 2 * wager);
+    // inner loop is the player
+    while(flagB == 0){
+      commit();
+
+      Player.only(() => {
+        interact.seeTotal(sumA);
+        const next = declassify(interact.getCard());
+      });
+      Player.publish(next);
+      if(next > 0){
+        [sumA ,flagB] = [(cardValue(next)+sumA), 0]; 
+        continue;
+      } else {
+        [sumA, flagB] = [sumA, 1];
+        continue;
+      }
+    };
+    if((sumB) < 15){
+      Dealer.only(() => {
+        const dealerCard = declassify(interact.autoCard());
+    });
+    commit();
+    Dealer.publish(dealerCard);
+
+    [sumB, flag] = [((cardValue(dealerCard))+sumB), 1];
+    continue;
+    } else {
+      [sumB, flag] = [sumB, 1];
+      continue;
+    }
+  };
+  // we can only use cardA and cardB values after we publish here
+  
+
+  transfer(2 * wager).to(Dealer);
+  //assert(flag == 1);
+  commit();
+  exit();
+});
