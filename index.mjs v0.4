@@ -1,0 +1,64 @@
+import {loadStdlib, ask} from '@reach-sh/stdlib';
+import * as backend from './build/index.main.mjs';
+const stdlib = loadStdlib(process.env);
+
+const startingBalance = stdlib.parseCurrency(100);
+
+const [ accAlice, accBob ] =
+  await stdlib.newTestAccounts(2, startingBalance);
+const fmt = (x) => stdlib.formatCurrency(x, 4);
+console.log('Hello, Alice and Bob!');
+console.log(`Both players start with ${fmt(startingBalance)}`);
+const ctcAlice = accAlice.contract(backend);
+const ctcBob = accBob.contract(backend, ctcAlice.getInfo());
+
+const cardDeck = { 1:'Ace', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '10', 11: 'Jack', 12: 'Queen',13: 'King'}
+
+const Shared = (Who) => ({
+  ...stdlib.hasRandom,
+  seeTotal: async (x) => {
+    console.log(`The total of your cards is: ${x}`);
+  },
+  
+  startGame: async () => {
+    var hands = [];
+    for(let i = 0; i < 2; i++){
+      const card = Math.floor(Math.random() * 12) + 1;
+      hands.push(card);
+    }
+    console.log(`${cardDeck[hands[0]]} and ${cardDeck[hands[1]]}`);
+    return [hands[0], hands[1]];
+  },
+});
+console.log('Starting backends...');
+await Promise.all([
+  backend.Player(ctcAlice, {
+    ...stdlib.hasRandom,
+    ...Shared('Player'),
+    wager: stdlib.parseCurrency(5),
+    getCard: async () => {
+      const hit = await ask.ask(
+        `Would you like another card?`,
+        ask.yesno
+      );
+      if(hit){
+        const card = Math.floor(Math.random() * 12) + 1;
+        console.log(`You drew a ${cardDeck[card]}`);
+        return card;
+      } else {
+        return 0;
+      }
+    },
+    // implement Alice's interact object her
+  }),
+  backend.Dealer(ctcBob, {
+    ...stdlib.hasRandom,
+    ...Shared('Dealer'),
+    autoCard: () => {
+      return Math.floor(Math.random() * 12) + 1;
+    },
+    // implement Bob's interact object here
+  }),
+]);
+
+console.log('Goodbye, Alice and Bob!');
