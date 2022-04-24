@@ -1,0 +1,63 @@
+'reach 0.1';
+/*
+This version has a single player draw off the deck and a flag to 
+control the while loop while prompting the user for more cards
+*/
+
+// this considers aces high
+const cardValue = (x) => (x == 1 ? 11 : (x < 10 ? x : 10))
+
+const Shared = {
+  ...hasRandom,
+  getCard: Fun([], UInt),
+  startGame: Fun([], Tuple(UInt, UInt)),
+};
+
+export const main = Reach.App(() => {
+  const A = Participant('Alice', {
+    ...Shared,
+    wager: UInt,
+    // Specify Alice's interact interface here
+  });
+  const B = Participant('Bob', {
+    ...Shared,
+    // Specify Bob's interact interface here
+  });
+  init();
+
+  A.only(() => {
+    const wager = declassify(interact.wager);
+    const [cardA, cardB] = declassify(interact.startGame());
+  });
+
+  // The first one to publish deploys the contract
+  A.publish(wager, cardA, cardB)
+    .pay(wager);
+  commit();
+  // The second one to publish always attaches
+  B.pay(wager);
+
+  // flag controls exiting the loop
+  var [sumA, flag] = [(cardValue(cardA) + cardValue(cardB)), 0];
+  invariant(balance() == 2 * wager);
+  while(sumA < 21 && flag == 0){
+    commit();
+
+    A.only(() => {
+      const next = declassify(interact.getCard());
+    });
+    A.publish(next);
+    if(next > 0){
+      [sumA, flag] = [(cardValue(next) + sumA), 0]; 
+      continue;
+    } else {
+      [sumA, flag] = [sumA, 1];
+      continue;
+    }
+  };
+
+  transfer(2 * wager).to(B);
+  //assert(flag == 1);
+  commit();
+  exit();
+});
