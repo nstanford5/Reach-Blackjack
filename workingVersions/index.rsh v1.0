@@ -1,21 +1,21 @@
 /*
 * This version has working logic. It uses flag controlled looping structures.
-* The outcome is not computed or returned. Still need to add assertions and clean up some logic
+* Still need to add assertions and clean up some logic
 */
 
 'reach 0.1';
+
+
 const [ isOutcome, P_WINS, D_WINS, DRAW] = makeEnum(3);
 
 const winner = (pSum, dSum) => {
-  if(pSum > dSum && pSum < 22){
-    return P_WINS;
+  // organized with most common occurance first
+  if(pSum > 22 || (dSum < 22 && dSum > pSum)){
+    return D_WINS;
   } else {
-    if( dSum < 22 && dSum != pSum) {
-      return D_WINS;
-    }
-    else{
-       return DRAW;
-    }
+    if((pSum < 22 && pSum > dSum) || dSum > 22){
+      return P_WINS;
+    } else return DRAW;
   }
 };
 
@@ -94,7 +94,7 @@ export const main = Reach.App(() => {
     .timeout(relativeTime(DEADLINE), () => closeTo(Player, informTimeout));
   //commit();
 
-  // display player total card value to front end
+  // display player first card to front end
   //Player.only(() => {interact.seeTotal(cardValue(playerFirst) + cardValue(playerSecond));});
 
   // display dealer first card to front end
@@ -165,11 +165,10 @@ export const main = Reach.App(() => {
   Dealer.only(() => interact.seeTotal(dSum));
 
   // when you invoke this code it changes the Dealer total
-  /*
   const outcome = winner(pSum, dSum);
   each([Player, Dealer], () => {
     interact.seeOutcome(outcome);
-  });*/
+  });
 
   // write your program here
   exit();
