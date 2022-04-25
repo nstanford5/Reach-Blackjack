@@ -1,0 +1,176 @@
+/*
+* This version has working logic. It uses flag controlled looping structures.
+* The outcome is not computed or returned. Still need to add assertions and clean up some logic
+*/
+
+'reach 0.1';
+const [ isOutcome, P_WINS, D_WINS, DRAW] = makeEnum(3);
+
+const winner = (pSum, dSum) => {
+  if(pSum > dSum && pSum < 22){
+    return P_WINS;
+  } else {
+    if( dSum < 22 && dSum != pSum) {
+      return D_WINS;
+    }
+    else{
+       return DRAW;
+    }
+  }
+};
+
+// Shared player functions
+const Shared = {
+  ...hasRandom,
+  startGame: Fun([], Tuple(UInt, UInt)),
+  informTimeout: Fun([], Null),
+  seeTotal: Fun([UInt], Null),
+  seeOutcome: Fun([UInt], Null),
+};
+
+// this assumes Ace is high
+const cardValue = (x) => (x == 1 ? 11 : (x < 10 ? x : 10))
+const DEADLINE = 20;
+
+
+export const main = Reach.App(() => {
+  const Player = Participant('Player', {
+    ...Shared,
+    wager: UInt,
+    getCard: Fun([], UInt),
+  });
+  const Dealer = Participant('Dealer', {
+    ...Shared,
+    autoCard: Fun([], UInt),
+    acceptWager: Fun([UInt], Null),
+    seeFirst: Fun([UInt], Null),
+  });
+  init();
+
+  const informTimeout = () => {
+    each([Player, Dealer], () => {
+      interact.informTimeout();
+    });
+  };
+
+  Player.only(() => {
+    const wager = declassify(interact.wager);
+  });
+
+  // Player pays to deploy the contract
+  Player.publish(wager)
+    .pay(wager);
+  commit();
+
+  Dealer.only(() => {
+    interact.acceptWager(wager);
+  });
+  Dealer.pay(wager)
+    .timeout(relativeTime(DEADLINE), () => closeTo(Player, informTimeout));
+  commit();
+
+  // player draws two cards, publishes both - because the house edge
+  Player.only(() => {
+    const [_playerFirst, _playerSecond] = interact.startGame();
+    const [_commitA, _saltA] = makeCommitment(interact, _playerFirst);
+    const commitA = declassify(_commitA);
+    const playerFirst = declassify(_playerFirst);
+    const [_commitC, _saltC] = makeCommitment(interact, _playerSecond);
+    const commitC = declassify(_commitC);
+    const playerSecond = declassify(_playerSecond);
+  });
+
+  Player.publish(commitA, playerFirst, commitC, playerSecond)
+    .timeout(relativeTime(DEADLINE), () => closeTo(Dealer, informTimeout));
+  commit();
+
+  Dealer.only(() => {
+    const [_dealerFirst, _dealerSecond] = interact.startGame();
+    const [_commitB, _saltB] = makeCommitment(interact, _dealerFirst);
+    const commitB = declassify(_commitB);
+    const dealerFirst = declassify(_dealerFirst);
+  });
+  Dealer.publish(commitB, dealerFirst)
+    .timeout(relativeTime(DEADLINE), () => closeTo(Player, informTimeout));
+  //commit();
+
+  // display player total card value to front end
+  //Player.only(() => {interact.seeTotal(cardValue(playerFirst) + cardValue(playerSecond));});
+
+  // display dealer first card to front end
+  Dealer.only(() => {
+    interact.seeFirst(dealerFirst);
+  });
+
+  // flags are turned off when first player, then dealer actions are complete
+  var [pFlag, dFlag, pSum, dSum, turn ] = [1,1,(cardValue(playerFirst)+cardValue(playerSecond)), cardValue(dealerFirst), 0];
+  invariant(balance() == 2 * wager);
+  // loop while either flag switch is on
+  while(pFlag == 1 || dFlag == 1){
+    // players loop
+    // if its the first turn, update dealers total
+    if(turn == 0){
+      commit();
+        
+      // publish second card
+      Dealer.only(() => {
+        const dealerSecond = declassify(_dealerSecond);
+      });
+      Dealer.publish(dealerSecond);
+      
+        // update dealer sum
+      [pFlag, dFlag, pSum, dSum, turn] = [1, 1, pSum, dSum + cardValue(dealerSecond), 1];
+      continue;
+    } else {
+      if(pFlag == 1 && pSum < 22){ // player chooses yes or no turns this branch on / off
+        // Display current total, prompt for next card
+        commit();
+        Player.only(() => {
+          interact.seeTotal(pSum);
+          const nextCard = declassify(interact.getCard());
+        });
+        Player.publish(nextCard)
+          .timeout(relativeTime(DEADLINE), () => closeTo(Dealer, informTimeout));
+        // update pSum, check nextCard for off n
+        [pFlag, dFlag, pSum, dSum, turn] = [(nextCard < 1 ? 0 : 1), 1, pSum + cardValue(nextCard), dSum, 1];
+        continue;
+      }
+    }  if (((dSum < 16 || dSum < pSum) && dSum < 20) && pSum < 22){ // dealer needs to draw
+      commit();
+      Dealer.publish();
+
+      commit();
+        Dealer.only(() => {
+          const dealerNext = declassify(interact.autoCard());
+        });
+        Dealer.publish(dealerNext)
+          .timeout(relativeTime(DEADLINE), () => closeTo(Player, informTimeout));
+        
+        // update sum, leave dealer flag on
+        [pFlag, dFlag, pSum, dSum, turn] = [0, 1, pSum, (dSum + cardValue(dealerNext)), 1];
+        continue;
+      } else {// dealer doesn't need to draw
+        commit();
+        Dealer.publish();
+        // turn the dealer flag off
+        [pFlag, dFlag, pSum, dSum, turn] = [0, 0, pSum, dSum, 1];
+        continue;
+      }
+  }; // end of while
+
+  transfer(2 * wager).to(pSum > dSum ? Player : Dealer);
+  commit();
+  // show sums
+  Player.only(() => interact.seeTotal(pSum));
+  Dealer.only(() => interact.seeTotal(dSum));
+
+  // when you invoke this code it changes the Dealer total
+  /*
+  const outcome = winner(pSum, dSum);
+  each([Player, Dealer], () => {
+    interact.seeOutcome(outcome);
+  });*/
+
+  // write your program here
+  exit();
+});
