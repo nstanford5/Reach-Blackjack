@@ -19,6 +19,7 @@
 
 const [ isOutcome, P_WINS, D_WINS, DRAW] = makeEnum(3);
 const DEALER_FEE = 5000000;
+
 // function to compute the winner
 // takes in two sums
 const winner = (pTotal, dTotal) => {
@@ -90,6 +91,7 @@ export const main = Reach.App(() => {
   Dealer.only(() => {
     interact.acceptWager(wager);
   });
+  
   // dealers extra fee goes in
   Dealer.pay(wager + DEALER_FEE)
     .timeout(relativeTime(DEADLINE), () => closeTo(Player, informTimeout));
@@ -127,8 +129,10 @@ export const main = Reach.App(() => {
       const dCommit = declassify(_dCommit);
       const dSecond = declassify(_dSecond);
     });
+    
     // Player can't know secret card here
     unknowable(Player, Dealer(_dFirst));
+    
     Dealer.publish(dCommit, dSecond)
       .timeout(relativeTime(DEADLINE), () => closeTo(Player, informTimeout));
 
@@ -146,14 +150,17 @@ export const main = Reach.App(() => {
     var [pFlag, dFlag, pSum, dSum, pAces, dAces, pTurn, dTurn] = [1, 1, cardValue(pFirst) + cardValue(pSecond), cardValue(dSecond), (pFirst == 1 ? 1 : 0) + (pSecond == 1 ? 1 : 0), 0, 0, 0];
     invariant(balance() == ((2 * wager) + DEALER_FEE));
     while(pFlag == 1 || dFlag == 1) {
+    
       // if the player has at least once Ace, let them choose
       if(pAces > 0){
         commit();
         unknowable(Player, Dealer(_dFirst));
+        
         // prompt user if they want high / low
         Player.only(() => {
           const aceValue = declassify(interact.getAceValue(pAces, pSum));
         });
+        
         // publish the choice of their ace value
         Player.publish(aceValue);
 
@@ -166,12 +173,14 @@ export const main = Reach.App(() => {
         [pAces] = [pAces - 1];
         continue;
       }
-      // player gets another card
+      // player gets to choose if they want another card
       if(pFlag == 1 && pSum < 21) {
         commit();
+        
         // prompt user for another card
         // returns 0 if player stays
         unknowable(Player, Dealer(_dFirst));
+        
         Player.only(() => {
           const pNext = declassify(interact.getCard());
         });
@@ -182,15 +191,18 @@ export const main = Reach.App(() => {
         Dealer.only(() => {
           interact.updateCards(pNext);
         });
+        
       // checks pNext for off status
       // updates pSum
       // check pNext for Ace
       [pFlag, dFlag, pSum, dSum, pTurn, pAces] = [(pNext < 1 ? 0 : 1), 1, pSum + cardValue(pNext), dSum, 1, (pNext == 1 ? pAces + 1 : pAces)];
       continue; // end player logic
       } else {// start dealer logic
-        // if this is the first time through, update Dealers total with hidden card
+      
+      // if this is the first time through, update Dealers total with hidden card
       if(dTurn == 0){
         commit();
+        
         // dealer can now reveal hidden card
         Dealer.only(() => {
           const dFirst = declassify(_dFirst);
@@ -208,23 +220,28 @@ export const main = Reach.App(() => {
         [dSum, dTurn, dAces] = [dSum + cardValue(dFirst), 1, (dFirst == 1 ? 1 : 0) + (dSecond == 1 ? 1 : 0)];
         continue; 
       } else { 
+      
         // did player draw 21 on first hand?
         // did player bust?
         if((pTurn == 0 && pSum == 21) || pSum > 21){
           commit();
           Dealer.publish();
+          
           // hand over turn both flags off
           [pFlag, dFlag] = [0, 0];
           continue;
         } else {
+        
           // dealer busts but has an ace
           if(dSum > 21 && dAces > 0){
             commit();
             Dealer.publish();
+            
             // make the ace low, subtract 1 from ace count
             [dSum, dAces] = [dSum - 10, dAces - 1]
             continue;
           } else { // check if dealer needs to draw
+          
               if (dSum < pSum && dSum < 21){
                 commit();
                 Dealer.only(() => {
@@ -245,6 +262,7 @@ export const main = Reach.App(() => {
               } else {//dealer is in a position to win
               commit();
               Dealer.publish();
+              
               // turn dealer flag off
               [dFlag] = [0];
               continue;
