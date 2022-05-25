@@ -1,108 +1,71 @@
 import React from 'react';
+import PlayerViews from './PlayerViews.js';
 
-const exports = {};
+const exports = {...PlayerViews};
 
-exports.Wrapper = class extends React.Component{
+exports.Attach = class extends React.Component {
   render() {
-    const {content} = this.props;
-    return (
-      <div className="Deployer">
-        {content}
-      </div>
-    );
-  }
-}
-
-exports.GetCard = class extends React.Component {
-  render() {
-    const {parent, playable, handOne, handTwo, wFlag, pGames, dGames, buttonOn} = this.props;
-    return(
-      <div className="Game">
-        <div style={{
-          position: 'absolute',
-          right: 5,
-          top: 5,
-        }}>
-          <strong>First to 3 hands wins</strong>
-          <br/>
-          Your Wins:{pGames}
-          <br/>
-          Their Wins:{dGames}
-        </div>   
-          Your cards:
-          <br />{handOne}
-          <br />
-          <br/> Their cards:
-          <br/>{handTwo}
-          <br />
-      <button
-        disabled={(wFlag == 0 ? false : !playable)}
-        onClick={() => parent.playHand(1)}
-        >Hit</button>
-      <button
-        disabled={(wFlag == 0 ? false : !playable)}
-        onClick={() => parent.playHand(0)}
-        >Stay</button>
-      <button
-        disabled={!buttonOn}
-        onClick={() => parent.aceAction(0)}
-      >High</button>
-      <button
-        disabled={!buttonOn}
-        onClick={() => parent.aceAction(1)}
-      >Low</button>
-      </div>
-      
-    );
-  }
-}
-
-exports.Done = class extends React.Component{
-  render() {
-    const {outcome} = this.props;
-    const {handOne, handTwo, pTotal, dTotal, pGames, dGames, matchOut} = this.props;
+    const {parent} = this.props;
+    const {ctcInfoStr} = this.state || {};
     return (
       <div className="Game">
-        <div style={{
-          position: 'absolute',
-          right: 5,
-          top: 5,
-        }}>
-          <strong>First to 3 hands wins</strong>
-          <br/>
-          Your Wins: {pGames}
-          <br/>
-          Their Wins: {dGames}
-          <br/>
-        </div>
-        Your cards:
-          <br/> {handOne}
-          <br/> Their cards:
-          <br/> {handTwo}
-          <br/>
-        <br/> {outcome || 'Determining the winner..'}
-        <br/>
-        <br/>
-        Your Total:
-          <br/> {pTotal || "Calculating.."}
-          <br/> Their Total:
-          <br/> {dTotal || 'Calculating..'}
-        <br/>
-        <br/>
-        Match status:
-        <br/> {matchOut} 
+        Please paste the contract info to attach to:
+        <br />
+        <textarea spellcheck="false"
+          className='ContractInfo'
+          onChange={(e) => this.setState({ctcInfoStr: e.currentTarget.value})}
+          placeholder='{}'
+        />
+        <br />
+        <button
+          disabled={!ctcInfoStr}
+          onClick={() => parent.attach(ctcInfoStr)}
+        >Attach</button>
       </div>
     );
   }
 }
 
-exports.Timeout = class extends React.Component {
+exports.Attaching = class extends React.Component {
   render() {
     return (
       <div className="Game">
-        There's been a timeout. Someone took too long..
+        Attaching, please wait...
       </div>
     );
   }
 }
+
+exports.AcceptTerms = class extends React.Component {
+  render() {
+    const {wager, standardUnit, parent} = this.props;
+    const {disabled} = this.state || {};
+    return (
+      <div className="Game">
+        The terms of the game are:
+        <br /> Wager: {wager} {standardUnit}
+        <br />
+        <button
+          disabled={disabled}
+          onClick={() => {
+            this.setState({disabled: true});
+            parent.termsAccepted();
+          }}
+        >Accept terms and pay wager</button>
+      </div>
+    );
+  }
+}
+
+exports.WaitingForTurn = class extends React.Component {
+  render() {
+    return (
+      <div className="Game">
+        Waiting for the other player...
+        <br />Think about which move you want to play.
+      </div>
+    );
+  }
+}
+
 export default exports;
